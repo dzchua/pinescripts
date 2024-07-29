@@ -1,7 +1,6 @@
 //@version=5
 import DingZhang/Sizing/4 as s
 import DingZhang/Session/1 as session
-import TFlab/FVGDetectorLibrary/1 as FVG
 
 strategy("VWAP Band", overlay = true, slippage = 15, initial_capital = 100000)
 
