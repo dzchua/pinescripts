@@ -1,0 +1,59 @@
+//@version=5
+
+// @description Provides position sizing, SL, TP
+library("Sizing", overlay = true)
+
+// @function Calculate lot size based on percentage w.r.t account's equity
+// @param Default 1% risk, $100,000
+// @returns lot size
+export position_sizing(float percent=1., int capital=100000, int risk=5000, float value=200) =>
+    tick_value = syminfo.mintick * (syminfo.type == "forex" ? value : syminfo.type == "crypto" ? value : 1)
+    var initial_capital = capital
+    var float equity_high = strategy.initial_capital
+    i_percent = percent / 100
+    current_equity = strategy.equity
+    position_value = current_equity * i_percent
+    current_price = close
+    
+    stop_loss_long = (1 - tick_value) * current_price
+    stop_loss_short = (1 + tick_value) * current_price
+
+    // if current_equity > equity_high
+    //     equity_high := current_equity
+
+    // Risk Management
+    if current_equity < (equity_high - risk)
+        position_value := initial_capital * i_percent / 2
+    if current_equity < (equity_high - risk * 1.5)
+        position_value := initial_capital * i_percent / 4
+    if current_equity > (equity_high + risk * 2)
+        position_value := initial_capital * i_percent * 2
+    pos_size_long = position_value / (current_price - stop_loss_long)
+    pos_size_short = position_value / (current_price - stop_loss_short)
+
+    [pos_size_long, pos_size_short]
+
+// @function Calculate the stop loss from entry price
+// @param Default 1% risk
+// @returns Stop loss in price and tick value
+export stop_loss(float entry_price=close, float value=200) =>
+    tick_value = syminfo.mintick * (syminfo.type == "forex" ? value : syminfo.type == "crypto" ? value : 1)
+    current_price = entry_price
+    stop_loss_long = (1 - tick_value) * current_price
+    stop_loss_short = (1 + tick_value) * current_price
+    stop_loss_in_ticks_long = (current_price - stop_loss_long) / syminfo.mintick
+    stop_loss_in_ticks_short = (stop_loss_short - current_price) / syminfo.mintick
+
+    [stop_loss_in_ticks_long, stop_loss_in_ticks_short]
+
+// @function Calculate the profit target from entry price
+// @param Default 1% risk, rrr 1.0
+// @returns Profit value in ticks
+export profit_target(float percent=1., float entry_price=close, float ratio=1.) =>
+    i_percent = percent / 100
+    current_price = entry_price
+    rrr = ratio
+    take_profit_price = (1 + rrr * i_percent) * current_price
+    take_profit_in_ticks = (take_profit_price - current_price) / syminfo.mintick
+
+    take_profit_in_ticks
