@@ -1,0 +1,98 @@
+//@version=5
+import DingZhang/Sizing/4 as s
+import DingZhang/Session/1 as session
+import TFlab/FVGDetectorLibrary/1 as FVG
+
+strategy("VWAP Band", overlay = true, slippage = 15, initial_capital = 100000)
+
+/// User input
+DI_L = input.int(25, minval=1, title="DI Length") //17
+ADX_L = input.int(50, title="ADX Smoothing", minval=1, maxval=50) //14
+ADX_Level = input.int(50, title="ADX Level", minval=1, maxval=50)
+
+/// Trading Indicator
+[diplus, diminus, adx] = ta.dmi(DI_L, ADX_L)
+VWAP_H = ta.vwap(high)
+VWAP_L = ta.vwap(low)
+
+/// Smooth VWAP bands
+upperBand = ta.linreg(VWAP_H, 10, 0)
+lowerBand = ta.linreg(VWAP_L, 10, 0)
+
+/// Volatility Filter
+ADX_F = adx < ADX_Level
+
+/// Buy & Short Signal
+buy = ta.crossover(close, upperBand) and ADX_F
+short = ta.crossunder(close, lowerBand) and ADX_F
+sell = ta.crossunder(close, lowerBand)
+cover = ta.crossover(close, upperBand)
+/// EMA
+fastAverage = ta.ema(close, 7)
+slowAverage = ta.ema(close, 50)
+fast_buy_cross = ta.crossover(fastAverage, slowAverage)
+fast_sell_cross = ta.crossunder(fastAverage, slowAverage)
+buy_sig = ta.crossover(close,fastAverage)
+sell_sig = ta.crossunder(close,fastAverage)
+
+length = input(title="Length", defval=14)
+src = input(close, "Source")
+_pr(length) =>
+    max = ta.highest(length)
+    min = ta.lowest(length)
+    100 * (src - max) / (max - min)
+percentR = _pr(length)
+// obPlot = hline(-20, title="Upper Band", color=#0d0e13)
+// osPlot = hline(-80, title="Lower Band", color=#787B86)
+// buy = percentR < -80
+// sell = percentR > -20
+
+/// Plot graph
+/// VWAP Bands
+// a = plot(upperBand, color = color.green)
+// b = plot(lowerBand, color = color.red)
+// fill(a, b, color = color.new(color.aqua,70))
+plot(fastAverage, color = color.red)
+plot(slowAverage, color = color.green)
+
+MACDLength = input(2)
+fastLength = input(8)
+slowlength = input(50)
+MACD = ta.ema(close, fastLength) - ta.ema(close, slowlength)
+aMACD = ta.ema(MACD, MACDLength)
+delta = MACD - aMACD
+// plot(delta, color = color.red)
+// plot(MACD, color = color.black)
+asd = ta.crossover(MACD, delta)
+dsa = ta.crossunder(MACD, delta)
+
+[ny_session, ln_session, asia_session] = session.session(txt='America/New_York')
+bgcolor(ny_session ? color.new(color.blue, 90) : na)
+bgcolor(ln_session ? color.new(color.green, 90) : na)
+bgcolor(asia_session ? color.new(color.purple, 90) : na)
+
+/// Position Sizing
+current_price = close
+[pos_size_long, pos_size_short] = s.position_sizing(percent = 1., capital = 100000, risk = 4000, value=150)
+[stop_loss_long, stop_loss_short] = s.stop_loss(entry_price = close, value=150)
+profit_target = s.profit_target(percent = 1, entry_price = close, ratio = 0.45)
+
+
+/// Strategy Function
+if fast_buy_cross and strategy.position_size == 0
+    if buy_sig and (ny_session or ln_session or asia_session) or asd 
+        strategy.entry("Long", strategy.long, limit = current_price, qty = pos_size_long)
+        strategy.exit("Long", loss = stop_loss_long, profit = profit_target, comment_loss = "SL Long", comment_profit = "TP Long")
+    if ln_session and percentR < -80 //and dayofweek.tuesday
+        strategy.entry("Long", strategy.long, limit = current_price, qty = pos_size_long)
+        strategy.exit("Long", loss = stop_loss_long, profit = profit_target, comment_loss = "SL Long", comment_profit = "TP Long")
+
+if fast_sell_cross and strategy.position_size == 0
+    if sell_sig and (ny_session or ln_session or asia_session) or dsa
+        strategy.entry("Short", strategy.short, limit = current_price, qty = pos_size_short)
+        strategy.exit("Short", loss = stop_loss_short, profit = profit_target, comment_loss = "SL Short", comment_profit = "TP Short")
+    if ln_session and percentR > -20 //and dayofweek.tuesday
+        strategy.entry("Long", strategy.long, limit = current_price, qty = pos_size_long)
+        strategy.exit("Long", loss = stop_loss_long, profit = profit_target, comment_loss = "SL Long", comment_profit = "TP Long")
+
+
